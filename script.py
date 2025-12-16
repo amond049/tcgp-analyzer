@@ -2,11 +2,15 @@ import boto3
 
 session = boto3.Session(profile_name='default')
 
-db_client = session.client('dynamodb')
+rds_client = session.client('rds')
 
-def list_tables():
-    response = db_client.list_tables()
-    return response.get('TableNames', [])
+def list_rds_instances():
+    response = rds_client.describe_db_instances()
+    instances = response['DBInstances']
+    for instance in instances:
+        print(f"DB Instance Identifier: {instance['DBInstanceIdentifier']}, DB Instance Class: {instance['DBInstanceClass']}, Engine: {instance['Engine']}")
+    return instances
+
 
 if __name__ == "__main__":
-    print(list_tables())
+    list_rds_instances()
