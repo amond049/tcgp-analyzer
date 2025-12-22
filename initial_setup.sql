@@ -1,5 +1,5 @@
 /* This file includes the SQL commands ran to make the initial tables in the database */
-CREATE TYPE POKEMON_TYPE AS ENUM ('GRASS', 'FIRE', 'WATER', 'LIGHTNING', 'PSYCHIC', 'FIGHTING', 'DARKNESS', 'METAL', 'COLORLESS')
+CREATE TYPE POKEMON_TYPE AS ENUM ('GRASS', 'FIRE', 'WATER', 'LIGHTNING', 'PSYCHIC', 'FIGHTING', 'DARKNESS', 'METAL', 'COLORLESS', 'DRAGON', 'NONE')
 
 CREATE TABLE expansion_table (
 	expansion_identifier VARCHAR(32) PRIMARY KEY,
@@ -18,7 +18,7 @@ CREATE TABLE cards (
 	rarity INTEGER NOT NULL,
 	card_image TEXT NOT NULL,
 	is_promo BOOLEAN NOT NULL,
-	evolves_from INTEGER REFERENCES cards(id),
+	evolves_from INTEGER,
 	illustrated_by VARCHAR(128) NOT NULL,
 	description TEXT,
 	is_supporter BOOLEAN,
