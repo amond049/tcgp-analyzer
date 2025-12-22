@@ -30,7 +30,14 @@ MOVES_TABLE = os.getenv("MOVES_TABLE")
 connection = connect(database=DATABASE, user=USER, password=PASSWORD, host=HOSTNAME, port=5432)
 cursor = connection.cursor()
 
-def update_card_count_in_promo(to_update_dictionary):
+
+def insert_new_cards(expansion_identifier: str, new_promo_cards: bool) -> None:
+    # Will need the expansion identifier, and will need to know if it's new promo cards being added 
+        # If this is the case, it will be quite simple to get the card number from which we need to start webscraping from 
+    # If it's an entirely new expansion, we will have to webscrape the entire set, this will be a time consuming operation! 
+    raise NotImplementedError("Still need to implement this method!")
+
+def update_card_count_in_promo(to_update_dictionary: dict[str, int]) -> None:
     for identifier, number_cards in to_update_dictionary.items():
         update_query = sql.SQL("UPDATE {table} SET {assignments} WHERE {field} = %s").format(
             table = sql.Identifier(EXPANSIONS_TABLE),
@@ -47,7 +54,7 @@ def update_card_count_in_promo(to_update_dictionary):
     connection.commit()
     connection.close()
 
-def update_database_with_new_expansion(expansions_in_db, expansions):
+def update_database_with_new_expansion(expansions_in_db: list, expansions: list) -> None:
     # Getting only the expansion identifier from the table as those are unique and will be used to identify 
     # which sets are already in the database
     identifiers_as_list = [expansion[0] for expansion in expansions_in_db]
@@ -79,7 +86,7 @@ def update_database_with_new_expansion(expansions_in_db, expansions):
     connection.close()
 
 
-def check_for_updates(expansions):
+def check_for_updates(expansions: list) -> None:
     # Compare the list of expansions with that of the results retrieved from the database
     retrieve_expansion_query = sql.SQL("SELECT {field} FROM {table}").format(
         field=sql.SQL(', ').join([
@@ -116,9 +123,11 @@ def check_for_updates(expansions):
             update_card_count_in_promo(to_update)
         else:
             print("All cards are up to date, exiting the program")
+            connection.commit()
+            connection.close()
 
 # The table containing all of the information has a class of data-table-sets-table striped
-def load_expansions():
+def load_expansions() -> list:
     expansion_page = requests.get(EXPANSION_URL)
 
     expansion_soup = BeautifulSoup(expansion_page.content, "html.parser")
