@@ -154,6 +154,9 @@ class Card:
     def get_expansion(self) -> str:
         return self._expansion
 
+    def get_expansion_number(self) -> int:
+        return self._expansion_number
+
     '''
     Setters
     '''
@@ -289,3 +292,6 @@ class TrainerSupporterOrToolCard(Card):
     '''
     def get_description(self) -> str:
         return self._description
+    
+    def get_is_supporter(self) -> str:
+        return self._is_supporter
