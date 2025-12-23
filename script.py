@@ -96,6 +96,42 @@ def get_card_ability(card_soup: BeautifulSoup):
 def get_evolves_from(card_soup: BeautifulSoup) -> str:
     return card_soup.find('p', class_='card-text-type').find('a').text
 
+def check_if_move_exists_in_db(move: PokemonMove) -> int:
+    move_exists_query = sql.SQL('SELECT {field} FROM {table} WHERE {move_name_column} = %s AND {move_damage_column} = %s AND  {move_description_column} = %s').format(
+        field = sql.Identifier('id'),
+        table = sql.Identifier(MOVES_TABLE),
+        move_name_column = sql.Identifier('move_name'),
+        move_damage_column = sql.Identifier('damage'),
+        move_description_column = sql.Identifier('description')
+    )
+
+    cursor.execute(move_exists_query, (move.get_name(), str(move.get_damage()), move.get_description()))
+
+    exists = cursor.fetchone()
+
+    if not exists:
+        data = {
+            "move_name": move.get_name(),
+            "damage": move.get_damage(),
+            "description": move.get_description()
+        }
+
+        move_create_query = sql.SQL('INSERT INTO {table} ({fields}) VALUES ({values}) RETURNING id').format(
+            table = sql.Identifier(MOVES_TABLE),
+            fields = sql.SQL(', ').join([
+                sql.Identifier('move_name'),
+                sql.Identifier('damage'),
+                sql.Identifier('description'),
+            ]),
+            values = sql.SQL(', ').join(sql.Placeholder() * len(data))
+        )
+
+        cursor.execute(move_create_query, tuple((data.values())))
+        return cursor.fetchone()[0]
+    else:
+        return exists[0]
+
+
 def get_card_info_as_tuple(card: Card):
     # These are guaranteed to exist for every single card
     card_name = card.get_name()
@@ -146,7 +182,12 @@ def get_card_info_as_tuple(card: Card):
         pass
     try:
         card_moves = card.get_moves()
-        card_move_1, card_move_2 = card_moves[0], None if len(card_moves) == 1 else card_moves[0], card_moves[1]
+        card_move_1 = card_moves[0]
+        card_move_2 = None if len(card_moves) == 1 else card_moves[1]
+
+        print(card_move_1.get_name())
+        if card_move_2:
+            print(card_move_2.get_name())
     except:
         # This means that the card does not have any moves
         pass
@@ -189,18 +230,16 @@ def get_card_info_as_tuple(card: Card):
 
             cursor.execute(ability_create_query, tuple(data.values()))
             card_ability = cursor.fetchone()[0]
-            print(card_ability)
         else:
-            print("The ability already exists in the database")
             card_ability = exists[0]
-            print(card_ability)
     if card_move_1:
-        pass
+        card_move_1 = check_if_move_exists_in_db(card_move_1)
     if card_move_2:
-        pass
+        card_move_2 = check_if_move_exists_in_db(card_move_2)
 
-    data_for_cards = (card_name, card_health, card_pokemon_type, card_stage, card_weakness, card_rarity, card_image, card_is_promo, card_evolves_from, card_illustrator, card_description, card_is_supporter, card_expansion, card_expansion_number)
+    data_for_cards = (card_name, card_health, card_pokemon_type, card_stage, card_weakness, card_rarity, card_image, card_is_promo, card_evolves_from, card_illustrator, card_description, card_is_supporter, card_expansion, card_expansion_number, card_ability, card_move_1, card_move_2)
 
+    print(data_for_cards)
     
 
 def webscrape_new_cards(expansion_identifier: str, card_number):
