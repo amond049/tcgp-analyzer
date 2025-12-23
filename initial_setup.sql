@@ -18,7 +18,7 @@ CREATE TABLE cards (
 	rarity INTEGER NOT NULL,
 	card_image TEXT NOT NULL,
 	is_promo BOOLEAN NOT NULL,
-	evolves_from INTEGER,
+	evolves_from VARCHAR(128),
 	illustrated_by VARCHAR(128) NOT NULL,
 	description TEXT,
 	is_supporter BOOLEAN,
@@ -39,6 +39,6 @@ CREATE TABLE abilities (
 CREATE TABLE moves (
 	id SERIAL PRIMARY KEY,
 	move_name VARCHAR(128) NOT NULL,
-	damage INTEGER,
+	damage VARCHAR(20),
 	description TEXT
 )
