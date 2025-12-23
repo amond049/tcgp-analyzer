@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 import os
 
 # Importing all of the models 
-from models import Expansion, StageBasicPokemonCard, StageNonBasicPokemonCard, TrainerItemCard, TrainerSupporterOrToolCard, expansions, PokemonType, PokemonAbility, PokemonMove
+from models import Expansion, StageBasicPokemonCard, StageNonBasicPokemonCard, TrainerItemCard, TrainerSupporterOrToolCard, expansions, PokemonType, PokemonAbility, PokemonMove, Card
+import models
 
 # TODO: Now that we create the expansion table, we will need to actually write all of the cards to the database, this will require more work and will be done afterwards
 
@@ -93,8 +94,217 @@ def get_card_ability(card_soup: BeautifulSoup):
         return None
     
 def get_evolves_from(card_soup: BeautifulSoup) -> str:
-    pre_evolution = card_soup.find('p', class_='card-text-type').find('a').text
-    print(pre_evolution)
+    return card_soup.find('p', class_='card-text-type').find('a').text
+
+def get_card_info_as_tuple(card: Card):
+    # These are guaranteed to exist for every single card
+    card_name = card.get_name()
+    card_rarity = card.get_rarity()
+    card_image = card.get_card_image()
+    card_is_promo = card.get_is_promo()
+    card_illustrator = card.get_illustrator()
+    card_expansion = card.get_expansion()
+    card_expansion_number = card.get_expansion_number()
+
+    # These are the more troublesome properties that some cards may have!
+    card_health = card_pokemon_type = card_stage = card_weakness = card_evolves_from = card_description = card_is_supporter = card_move_1 = card_move_2 = card_ability = None
+
+    try:
+        card_health = card.get_health()
+    except:
+        # This means that the card does not have a health value
+        pass
+    try:
+        card_pokemon_type = card.get_type()
+    except:
+        # This means that the card does not have a type
+        pass
+    try:
+        card_stage = card.get_stage()
+    except:
+        # This means the card does not have a stage
+        pass
+    try:
+        card_weakness = card.get_weakness()
+    except:
+        # This means the card type does not have weaknesses
+        pass
+    try:
+        card_evolves_from = card.get_evolves_from()
+    except:
+        # This means that this card type does not have a pre-evolution
+        pass
+    try:
+        card_description = card.get_description()
+    except:
+        # This means that the card does not have a description
+        pass
+    try:
+        card_is_supporter = card.get_is_supporter()
+    except:
+        # This means the card is not a supporter 
+        pass
+    try:
+        card_moves = card.get_moves()
+        card_move_1, card_move_2 = card_moves[0], None if len(card_moves) == 1 else card_moves[0], card_moves[1]
+    except:
+        # This means that the card does not have any moves
+        pass
+    try:
+        card_ability = card.get_ability()
+    except:
+        # This means that the card does not have an ability
+        pass
+
+    
+    if card_ability:
+        # Will need to check if the ability already exists in the database
+        ability_exists_check_query = sql.SQL('SELECT {field} FROM {table} WHERE {name_column} = %s AND {description_column} = %s').format(
+            field = sql.Identifier('id'),
+            table = sql.Identifier(ABILITIES_TABLE),
+            name_column = sql.Identifier('ability_name'),
+            description_column = sql.Identifier('description')
+        )
+
+        cursor.execute(ability_exists_check_query, (card_ability.get_name(), card_ability.get_description()))
+
+        # This will print if the ability of the card already exists in the database
+        exists = cursor.fetchone()
+        
+        if not exists:
+            data = {
+                "ability_name": card_ability.get_name(),
+                "description": card_ability.get_description()
+            }
+
+            # Need to create a new move, and then assign the ID
+            ability_create_query = sql.SQL('INSERT INTO {table} ({fields}) VALUES ({values}) RETURNING id').format(
+                table = sql.Identifier(ABILITIES_TABLE),
+                fields = sql.SQL(', ').join([
+                    sql.Identifier('ability_name'),
+                    sql.Identifier('description'),
+                ]),
+                values = sql.SQL(", ").join(sql.Placeholder() * len(data))
+            )
+
+            cursor.execute(ability_create_query, tuple(data.values()))
+            card_ability = cursor.fetchone()[0]
+            print(card_ability)
+        else:
+            print("The ability already exists in the database")
+            card_ability = exists[0]
+            print(card_ability)
+    if card_move_1:
+        pass
+    if card_move_2:
+        pass
+
+    data_for_cards = (card_name, card_health, card_pokemon_type, card_stage, card_weakness, card_rarity, card_image, card_is_promo, card_evolves_from, card_illustrator, card_description, card_is_supporter, card_expansion, card_expansion_number)
+
+    
+
+def webscrape_new_cards(expansion_identifier: str, card_number):
+    card_page = requests.get(f"{EXPANSION_URL}/{expansion_identifier}/{card_number}")
+    card_soup = BeautifulSoup(card_page.content, "html.parser")
+
+    # Some information that we know all cards to have, then we will delve into the specific card types
+
+    # The card name 
+    card_name = card_soup.find("span", class_="card-text-name").text
+
+    # Determine if the card is a promo card
+    card_is_promo = expansion_identifier.startswith('P-')
+
+    # The card's rarity
+    rarity_container = card_soup.find("div", class_='prints-current-details')
+
+    rarity_text_unprocessed = rarity_container.find("span", class_='text-lg').find_next('span').text
+    rarity_text_list = [element for element in rarity_text_unprocessed.split("\n") if len(element.strip()) > 0]
+    rarity_string = rarity_text_list[0].strip().split(" ")
+    card_rarity = 0
+
+    try:
+        # For some reason, the promos have no rarity, thus trying to print the second index will throw an index out of bounds exception
+        card_rarity = len(rarity_string[2]) if card_is_promo else 0
+    except:
+        print("Dealing with a promo card, has no rating!")
+
+    # The card's image
+    card_image_container = card_soup.find("div", class_='card-image')
+    card_image = card_image_container.find("img", class_='card shadow resp-w')['src']
+        
+    # The card's illustrator
+    card_illustrator_container = card_soup.find("div", class_='card-text-section card-text-artist')
+    card_illustrator = card_illustrator_container.find("a").text.strip()
+
+    # Remember, this is a foreign key to the expansion_table!
+    card_expansion = expansion_identifier
+    card_expansion_number = card_number
+
+
+    # At this point, all of the information that every card has has been retrieved, now it's a matter of creating the right object depending on the card type
+    card_type = [element.strip() for element in card_soup.find("p", class_='card-text-type').text.strip().split(" ") if len(element) > 0]
+    
+    # This will contain all of the new cards that need to be added to the database
+    new_entries = []
+
+    if card_type[0] == 'Trainer':
+        # Getting the description
+        card_description = card_soup.find("div", class_='card-text-section').find_next('div').text.strip()
+            
+        # This means it's a trainer card, which means it could be an item, tool or supporter card
+        if card_type[-1] == 'Item':
+            # We need the health and the description (in the case of a fossil)
+            # Fossil check
+            card_health = get_card_health(card_soup)
+
+            # Creating the object that represents an item card 
+            trainer_item_card = TrainerItemCard(card_name, card_rarity, card_image, card_is_promo, card_illustrator, card_description, card_expansion, card_expansion_number, card_health)
+            new_entries.append(trainer_item_card)
+            # TODO: Will need to write this information to the database
+        elif card_type[-1] == 'Supporter':
+            is_supporter = True 
+            trainer_supporter_card = TrainerSupporterOrToolCard(card_name, card_rarity, card_image, card_is_promo, card_illustrator, card_description, is_supporter, card_expansion, card_expansion_number)
+            new_entries.append(trainer_supporter_card)
+            # TODO Will need to write this information to the database
+        elif card_type[-1] == 'Tool':
+            is_supporter = False
+            trainer_tool_card = TrainerSupporterOrToolCard(card_name, card_rarity, card_image, card_is_promo, card_illustrator, card_description, is_supporter, card_expansion, card_expansion_number)
+            new_entries.append(trainer_tool_card)
+            # TODO: Will need to write this information to the database
+
+    else:
+        pokemon_card_health = get_card_health(card_soup)
+        pokemon_card_type = get_card_type(card_soup)
+        pokemon_card_weakness = get_card_weakness(card_soup)
+        pokemon_card_retreat_cost = get_card_retreat_cost(card_soup)
+        # This will need to be written to a separate table
+        pokemon_card_moves = get_card_moves(card_soup)
+        # This will also need to be written to a separate table
+        pokemon_card_ability = get_card_ability(card_soup)
+
+        # This means it's either a basic, stage 1 or 2 pokemon
+        if card_type[2] == 'Basic':
+            # This means we are dealing with a basic pokemon                    
+            stage_basic_pokemon = StageBasicPokemonCard(card_name, pokemon_card_health, pokemon_card_type, pokemon_card_weakness, pokemon_card_retreat_cost, card_rarity, pokemon_card_moves, pokemon_card_ability, card_image, card_is_promo, card_illustrator, card_expansion, card_expansion_number)
+            # TODO: Need to write this information to the database
+            new_entries.append(stage_basic_pokemon)
+        else:
+            card_pre_evolution = get_evolves_from(card_soup)
+
+            # This means we are dealing with a stage 1 or 2 pokemon
+            if card_type[3] == '1':
+                stage_non_basic_pokemon = StageNonBasicPokemonCard(card_name, pokemon_card_health, pokemon_card_type, pokemon_card_weakness, pokemon_card_retreat_cost, card_rarity, pokemon_card_moves, pokemon_card_ability, card_image, card_is_promo, card_illustrator, 1, card_pre_evolution, card_expansion, card_expansion_number)
+                # TODO: Will need to write this information to the database, I wonder if I can use a bulk insert operation?
+                new_entries.append(stage_non_basic_pokemon)
+            elif card_type[3] == '2':
+                stage_non_basic_pokemon = StageNonBasicPokemonCard(card_name, pokemon_card_health, pokemon_card_type, pokemon_card_weakness, pokemon_card_retreat_cost, card_rarity, pokemon_card_moves, pokemon_card_ability, card_image, card_is_promo, card_illustrator, 2, card_pre_evolution, card_expansion, card_expansion_number)
+                # TODO: Will need to write this information to the database
+                new_entries.append(stage_non_basic_pokemon)
+
+    for card in new_entries:
+        get_card_info_as_tuple(card)
+
 
 def insert_new_cards(expansion_identifier: str, number_cards: int, new_promo_cards: bool) -> None:
     # Will need the expansion identifier, and will need to know if it's new promo cards being added 
@@ -104,102 +314,23 @@ def insert_new_cards(expansion_identifier: str, number_cards: int, new_promo_car
         # This means it's an entirely new expansion that needs to be added
         # Time to do some more webscraping
         for card_number in range(1, number_cards + 1):
-            card_page = requests.get(f"{EXPANSION_URL}/{expansion_identifier}/{card_number}")
-            card_soup = BeautifulSoup(card_page.content, "html.parser")
-
-            # Some information that we know all cards to have, then we will delve into the specific card types
-
-            # The card name 
-            card_name = card_soup.find("span", class_="card-text-name").text
-
-            # Determine if the card is a promo card
-            card_is_promo = expansion_identifier.startswith('P-')
-
-            # The card's rarity
-            rarity_container = card_soup.find("div", class_='prints-current-details')
-
-            rarity_text_unprocessed = rarity_container.find("span", class_='text-lg').find_next('span').text
-            rarity_text_list = [element for element in rarity_text_unprocessed.split("\n") if len(element.strip()) > 0]
-            rarity_string = rarity_text_list[0].strip().split(" ")
-            card_rarity = 0
-
-            try:
-                # For some reason, the promos have no rarity, thus trying to print the second index will throw an index out of bounds exception
-                card_rarity = len(rarity_string[2]) if card_is_promo else 0
-            except:
-                print("Dealing with a promo card, has no rating!")
-
-            # The card's image
-            card_image_container = card_soup.find("div", class_='card-image')
-            card_image = card_image_container.find("img", class_='card shadow resp-w')['src']
-             
-            # The card's illustrator
-            card_illustrator_container = card_soup.find("div", class_='card-text-section card-text-artist')
-            card_illustrator = card_illustrator_container.find("a").text.strip()
-
-            # Remember, this is a foreign key to the expansion_table!
-            card_expansion = expansion_identifier
-            card_expansion_number = card_number
-
-
-            # At this point, all of the information that every card has has been retrieved, now it's a matter of creating the right object depending on the card type
-            card_type = [element.strip() for element in card_soup.find("p", class_='card-text-type').text.strip().split(" ") if len(element) > 0]
-
-            if card_type[0] == 'Trainer':
-                # Getting the description
-                card_description = card_soup.find("div", class_='card-text-section').find_next('div').text.strip()
-                    
-                # This means it's a trainer card, which means it could be an item, tool or supporter card
-                if card_type[-1] == 'Item':
-                    # We need the health and the description (in the case of a fossil)
-                    # Fossil check
-                    card_health = get_card_health(card_soup)
-
-                    # Creating the object that represents an item card 
-                    trainer_item_card = TrainerItemCard(card_name, card_rarity, card_image, card_is_promo, card_illustrator, card_description, card_expansion, card_expansion_number, card_health)
-
-                    # TODO: Will need to write this information to the database
-                elif card_type[-1] == 'Supporter':
-                    is_supporter = True 
-                    trainer_supporter_card = TrainerSupporterOrToolCard(card_name, card_rarity, card_image, card_is_promo, card_illustrator, card_description, is_supporter, card_expansion, card_expansion_number)
-                    
-                    # TODO Will need to write this information to the database
-                elif card_type[-1] == 'Tool':
-                    is_supporter = False
-                    trainer_tool_card = TrainerSupporterOrToolCard(card_name, card_rarity, card_image, card_is_promo, card_illustrator, card_description, is_supporter, card_expansion, card_expansion_number)
-                    
-                    # TODO: Will need to write this information to the database
-
-            else:
-                pokemon_card_health = get_card_health(card_soup)
-                pokemon_card_type = get_card_type(card_soup)
-                pokemon_card_weakness = get_card_weakness(card_soup)
-                pokemon_card_retreat_cost = get_card_retreat_cost(card_soup)
-                # This will need to be written to a separate table
-                pokemon_card_moves = get_card_moves(card_soup)
-                # This will also need to be written to a separate table
-                pokemon_card_ability = get_card_ability(card_soup)
-
-                # This means it's either a basic, stage 1 or 2 pokemon
-                if card_type[2] == 'Basic':
-                    # This means we are dealing with a basic pokemon                    
-                    stage_basic_pokemon = StageBasicPokemonCard(card_name, pokemon_card_health, pokemon_card_type, pokemon_card_weakness, pokemon_card_retreat_cost, card_rarity, pokemon_card_moves, pokemon_card_ability, card_image, card_is_promo, card_illustrator, card_expansion, card_expansion_number)
-                    # TODO: Need to write this information to the database
-                else:
-                    card_pre_evolution = get_evolves_from(card_soup)
-
-                    # This means we are dealing with a stage 1 or 2 pokemon
-                    if card_type[3] == '1':
-                        stage_non_basic_pokemon = StageNonBasicPokemonCard(card_name, pokemon_card_health, pokemon_card_type, pokemon_card_weakness, pokemon_card_retreat_cost, card_rarity, pokemon_card_moves, pokemon_card_ability, card_image, card_is_promo, card_illustrator, 1, card_pre_evolution, card_expansion, card_expansion_number)
-                        # TODO: Will need to write this information to the database, I wonder if I can use a bulk insert operation?
-                    elif card_type[3] == '2':
-                        stage_non_basic_pokemon = StageNonBasicPokemonCard(card_name, pokemon_card_health, pokemon_card_type, pokemon_card_weakness, pokemon_card_retreat_cost, card_rarity, pokemon_card_moves, pokemon_card_ability, card_image, card_is_promo, card_illustrator, 2, card_pre_evolution, card_expansion, card_expansion_number)
-                        # TODO: Will need to write this information to the database
-
-            
+            webscrape_new_cards(expansion_identifier, card_number)
     else:
-        # We will need to know what the last card inserted was in the promos table 
-        raise NotImplementedError
+        # Will need to get the current number of cards in the database for the promo missing cards
+        promo_card_count_query = sql.SQL("SELECT {field} FROM {table} WHERE {expansion_identifier} = %s").format(
+            field = sql.Identifier('number_cards'),
+            table = sql.Identifier(EXPANSIONS_TABLE),
+            expansion_identifier = sql.Identifier('expansion_identifier')
+        )
+
+        cursor.execute(promo_card_count_query, (expansion_identifier,))
+
+        most_recent_number_cards = cursor.fetchall()
+
+        # We know the numbers to be mismatched, so now we need to webscrape the missing cards
+        for card_number in range(most_recent_number_cards[0][0] + 1, number_cards + 1):
+            webscrape_new_cards(expansion_identifier, card_number)
+
 
 def update_card_count_in_promo(to_update_dictionary: dict[str, int]) -> None:
     for identifier, number_cards in to_update_dictionary.items():
@@ -245,7 +376,7 @@ def update_database_with_new_expansion(expansions_in_db: list, expansions: list)
             cursor.execute(insert_query, tuple(data.values()))
 
             # TODO: Will need a function call here to load the new cards from the new expansions in the database
-            insert_new_cards(expansion.fer_expansion_identifier(), expansion.get_number_cards(), False)
+            insert_new_cards(expansion.get_expansion_identifier(), expansion.get_number_cards(), False)
     # Closing the connection to avoid memory leaks
     connection.commit()
     connection.close()
@@ -342,4 +473,7 @@ def load_expansions() -> list:
 
 
 # Testing
-insert_new_cards('A1', 286, False)
+insert_new_cards('A2', 207, False)
+connection.commit()
+connection.close()
+#insert_new_cards('P-A', 117, True)
