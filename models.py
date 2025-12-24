@@ -35,7 +35,8 @@ class PokemonType(Enum):
     DARKNESS = 7
     METAL = 8
     COLORLESS = 9
-
+    DRAGON = 10
+    NONE = 11
 
 '''
 Class representing the structure of an expansion record the game has had
@@ -153,6 +154,9 @@ class Card:
     def get_expansion(self) -> str:
         return self._expansion
 
+    def get_expansion_number(self) -> int:
+        return self._expansion_number
+
     '''
     Setters
     '''
@@ -173,7 +177,7 @@ class Card:
 
 class PokemonCard(Card):
     def __init__(self, name: str, health: int, type: PokemonType, weakness: PokemonType, retreat_cost: int, rarity: int, moves: list[PokemonMove], ability: PokemonAbility, card_image: str, is_promo: bool, illustrator: str, expansion: str, expansion_number: int):
-        super.__init__(name, rarity, card_image, is_promo, illustrator, expansion, expansion_number)
+        super().__init__(name, rarity, card_image, is_promo, illustrator, expansion, expansion_number)
         self._health = health
         self._type = type
         self._weakness = weakness 
@@ -231,7 +235,7 @@ class PokemonCard(Card):
 
 class StageBasicPokemonCard(PokemonCard):
     def __init__(self, name: str, health: int, type: PokemonType, weakness: PokemonType, retreat_cost: int, rarity: int, moves: list[PokemonMove], ability: PokemonAbility, card_image: str, is_promo: bool, illustrated_by: str, expansion: Expansion, expansion_number: int):
-        super.__init__(name, health, type, weakness, retreat_cost, rarity, moves, ability, card_image, is_promo, illustrated_by, expansion, expansion_number)
+        super().__init__(name, health, type, weakness, retreat_cost, rarity, moves, ability, card_image, is_promo, illustrated_by, expansion, expansion_number)
         # Basic Pokemon will have a stage of 0, this is since the second stage pokemon is technically a stage 1 Pokemon
         self._stage = 0
     
@@ -243,7 +247,7 @@ class StageBasicPokemonCard(PokemonCard):
     
 class StageNonBasicPokemonCard(PokemonCard):
     def __init__(self, name: str, health: int, type: PokemonType, weakness: PokemonType, retreat_cost: int, rarity: int, moves: list[PokemonMove], ability: PokemonAbility, card_image: str, is_promo: bool, illustrated_by: str, stage: int, evolves_from: str, expansion: Expansion, expansion_number: int):
-        super.__init__(name, health, type, weakness, retreat_cost, rarity, moves, ability, card_image, is_promo, illustrated_by, expansion, expansion_number)
+        super().__init__(name, health, type, weakness, retreat_cost, rarity, moves, ability, card_image, is_promo, illustrated_by, expansion, expansion_number)
         self._stage = stage
         self._evolves_from = evolves_from
     
@@ -259,7 +263,7 @@ class StageNonBasicPokemonCard(PokemonCard):
 class TrainerItemCard(Card):
     # -1 is the flag value for an item that is NOT a fossil
     def __init__(self, name: str, rarity: int, card_image: str, is_promo: bool, illustrated_by: str, description: str, expansion: Expansion, expansion_number: int, health = -1):
-        super.__init__(name, rarity, card_image, is_promo, illustrated_by, expansion, expansion_number)
+        super().__init__(name, rarity, card_image, is_promo, illustrated_by, expansion, expansion_number)
         self._health = health
         self._description = description 
     
@@ -279,7 +283,7 @@ class TrainerSupporterOrToolCard(Card):
     # Since the class definition for supporter and tool type cards are the exact same, I will be using one class to represent them and a boolean value will differentiate them
     # A getter for is_supporter is not required since there is no situation I foresee needing to retrieve this information, but this is subject to change as develoment continues
     def __init__(self, name: str, rarity: int, card_image: str, is_promo: bool, illustrated_by: str, description: str, is_supporter: bool, expansion: Expansion, expansion_number: int):
-        super.__init__(name, rarity, card_image, is_promo, illustrated_by, expansion, expansion_number)
+        super().__init__(name, rarity, card_image, is_promo, illustrated_by, expansion, expansion_number)
         self._description = description
         self._is_supporter = is_supporter
 
@@ -288,3 +292,6 @@ class TrainerSupporterOrToolCard(Card):
     '''
     def get_description(self) -> str:
         return self._description
+    
+    def get_is_supporter(self) -> str:
+        return self._is_supporter
