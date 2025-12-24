@@ -132,7 +132,7 @@ def check_if_move_exists_in_db(move: PokemonMove) -> int:
         return exists[0]
 
 
-def get_card_info_as_tuple(card: Card):
+def get_card_info_as_tuple(card: Card): 
     # These are guaranteed to exist for every single card
     card_name = card.get_name()
     card_rarity = card.get_rarity()
@@ -185,9 +185,8 @@ def get_card_info_as_tuple(card: Card):
         card_move_1 = card_moves[0]
         card_move_2 = None if len(card_moves) == 1 else card_moves[1]
 
-        print(card_move_1.get_name())
-        if card_move_2:
-            print(card_move_2.get_name())
+        card_move_1.set_name(card_move_1.get_name().strip())
+        card_move_2.set_name(card_move_2.get_name().strip())
     except:
         # This means that the card does not have any moves
         pass
@@ -203,7 +202,7 @@ def get_card_info_as_tuple(card: Card):
         ability_exists_check_query = sql.SQL('SELECT {field} FROM {table} WHERE {name_column} = %s AND {description_column} = %s').format(
             field = sql.Identifier('id'),
             table = sql.Identifier(ABILITIES_TABLE),
-            name_column = sql.Identifier('ability_name'),
+            name_column = sql.Identifier('ability_name'), 
             description_column = sql.Identifier('description')
         )
 
@@ -239,7 +238,7 @@ def get_card_info_as_tuple(card: Card):
 
     data_for_cards = (card_name, card_health, card_pokemon_type, card_stage, card_weakness, card_rarity, card_image, card_is_promo, card_evolves_from, card_illustrator, card_description, card_is_supporter, card_expansion, card_expansion_number, card_ability, card_move_1, card_move_2)
 
-    print(data_for_cards)
+    return data_for_cards 
     
 
 def webscrape_new_cards(expansion_identifier: str, card_number):
@@ -266,7 +265,7 @@ def webscrape_new_cards(expansion_identifier: str, card_number):
         # For some reason, the promos have no rarity, thus trying to print the second index will throw an index out of bounds exception
         card_rarity = len(rarity_string[2]) if card_is_promo else 0
     except:
-        print("Dealing with a promo card, has no rating!")
+        pass
 
     # The card's image
     card_image_container = card_soup.find("div", class_='card-image')
@@ -300,17 +299,14 @@ def webscrape_new_cards(expansion_identifier: str, card_number):
             # Creating the object that represents an item card 
             trainer_item_card = TrainerItemCard(card_name, card_rarity, card_image, card_is_promo, card_illustrator, card_description, card_expansion, card_expansion_number, card_health)
             new_entries.append(trainer_item_card)
-            # TODO: Will need to write this information to the database
         elif card_type[-1] == 'Supporter':
             is_supporter = True 
             trainer_supporter_card = TrainerSupporterOrToolCard(card_name, card_rarity, card_image, card_is_promo, card_illustrator, card_description, is_supporter, card_expansion, card_expansion_number)
             new_entries.append(trainer_supporter_card)
-            # TODO Will need to write this information to the database
         elif card_type[-1] == 'Tool':
             is_supporter = False
             trainer_tool_card = TrainerSupporterOrToolCard(card_name, card_rarity, card_image, card_is_promo, card_illustrator, card_description, is_supporter, card_expansion, card_expansion_number)
             new_entries.append(trainer_tool_card)
-            # TODO: Will need to write this information to the database
 
     else:
         pokemon_card_health = get_card_health(card_soup)
@@ -334,15 +330,47 @@ def webscrape_new_cards(expansion_identifier: str, card_number):
             # This means we are dealing with a stage 1 or 2 pokemon
             if card_type[3] == '1':
                 stage_non_basic_pokemon = StageNonBasicPokemonCard(card_name, pokemon_card_health, pokemon_card_type, pokemon_card_weakness, pokemon_card_retreat_cost, card_rarity, pokemon_card_moves, pokemon_card_ability, card_image, card_is_promo, card_illustrator, 1, card_pre_evolution, card_expansion, card_expansion_number)
-                # TODO: Will need to write this information to the database, I wonder if I can use a bulk insert operation?
                 new_entries.append(stage_non_basic_pokemon)
             elif card_type[3] == '2':
                 stage_non_basic_pokemon = StageNonBasicPokemonCard(card_name, pokemon_card_health, pokemon_card_type, pokemon_card_weakness, pokemon_card_retreat_cost, card_rarity, pokemon_card_moves, pokemon_card_ability, card_image, card_is_promo, card_illustrator, 2, card_pre_evolution, card_expansion, card_expansion_number)
-                # TODO: Will need to write this information to the database
                 new_entries.append(stage_non_basic_pokemon)
 
+    all_data_in_expansion = [] 
     for card in new_entries:
-        get_card_info_as_tuple(card)
+        card_data = get_card_info_as_tuple(card)
+        all_data_in_expansion.append(card_data)
+
+    insert_card_data_query = sql.SQL('INSERT INTO {table} ({fields}) VALUES ').format(
+        table = sql.Identifier(CARDS_TABLE),
+        fields = sql.SQL(', ').join([
+            sql.Identifier('pokemon_name'),
+            sql.Identifier('health'),
+            sql.Identifier('pokemon_type'),
+            sql.Identifier('stage'),
+            sql.Identifier('weakness'),
+            sql.Identifier('rarity'),
+            sql.Identifier('card_image'),
+            sql.Identifier('is_promo'),
+            sql.Identifier('evolves_from'),
+            sql.Identifier('illustrated_by'),
+            sql.Identifier('description'),
+            sql.Identifier('is_supporter'),
+            sql.Identifier('expansion'),
+            sql.Identifier('expansion_number'),
+            sql.Identifier('ability'),
+            sql.Identifier('move1'),
+            sql.Identifier('move2'),
+        ])
+    )
+
+    insert_card_data_query_values = b','.join(
+        cursor.mogrify("(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", row)
+        for row in all_data_in_expansion
+    )
+
+    final_query = insert_card_data_query.as_string(cursor) + insert_card_data_query_values.decode('utf-8')
+
+    cursor.execute(final_query)
 
 
 def insert_new_cards(expansion_identifier: str, number_cards: int, new_promo_cards: bool) -> None:
@@ -416,6 +444,7 @@ def update_database_with_new_expansion(expansions_in_db: list, expansions: list)
 
             # TODO: Will need a function call here to load the new cards from the new expansions in the database
             insert_new_cards(expansion.get_expansion_identifier(), expansion.get_number_cards(), False)
+            print(f"Cards for Expansion: {expansion.get_name()} have been successfully inserted into the database!")
     # Closing the connection to avoid memory leaks
     connection.commit()
     connection.close()
@@ -507,12 +536,5 @@ def load_expansions() -> list:
 
 
 
-#expansions = load_expansions()
-#check_for_updates(expansions)
-
-
-# Testing
-insert_new_cards('A2', 207, False)
-connection.commit()
-connection.close()
-#insert_new_cards('P-A', 117, True)
+expansions = load_expansions()
+check_for_updates(expansions)
